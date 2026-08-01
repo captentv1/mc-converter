@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MC-Converter</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg:#f6f4ef; --surface:#ffffff; --border:#dcd6c8; --text:#242220;
+    --text-dim:#5a564d; --accent:#4a7c4e; --accent-dim:#e4ede3; --accent-ink:#2f5a33;
+    --danger:#a13c2d; --danger-dim:#f6e2dd; --wood:#a3703f; --wood-dim:#f3e6d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1a1c17; --surface:#222420; --border:#3a3b33; --text:#eae7dd;
+      --text-dim:#a7a294; --accent:#7fb87f; --accent-dim:#26332a; --accent-ink:#a9d6a9;
+      --danger:#e08672; --danger-dim:#3a2622; --wood:#c99b63; --wood-dim:#332920; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: ui-sans-serif, "Segoe UI", Arial, sans-serif; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+  h1 { font-size: 1.5rem; margin: 0 0 .3rem; }
+  .sub { color: var(--text-dim); margin: 0 0 2rem; font-size: .95rem; }
+  form { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+  .field { display: flex; flex-direction: column; gap: .3rem; }
+  label { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); }
+  input, select { font: inherit; padding: .5rem .6rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
+  button { font: inherit; font-weight: 600; padding: .65rem 1rem; border: none; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; width: 100%; margin-top: .5rem; }
+  button:hover { filter: brightness(.95); }
+  .hint { font-size: .8rem; color: var(--text-dim); margin-top: .2rem; }
+  .report { margin-top: 1.5rem; border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; background: var(--surface); }
+  .status { display: inline-block; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; padding: .2rem .55rem; border-radius: 4px; margin-bottom: .6rem; }
+  .status.ok { background: var(--accent-dim); color: var(--accent-ink); }
+  .status.partial { background: var(--wood-dim); color: var(--wood); }
+  .status.failed { background: var(--danger-dim); color: var(--danger); }
+  .error { color: var(--danger); font-size: .88rem; margin-bottom: 1rem; }
+  ul { margin: .4rem 0 0; padding-left: 1.1rem; font-size: .88rem; color: var(--text-dim); }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: .85em; background: var(--bg); border: 1px solid var(--border); padding: .1em .35em; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>MC-Converter</h1>
+  <p class="sub">Convertisseur de version / loader pour Minecraft Java.</p>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  <form method="post" action="/convert" enctype="multipart/form-data">
+    <div class="row">
+      <div class="field">
+        <label for="type">Type</label>
+        <select name="type" id="type">
+          {% for t in types %}<option value="{{ t.value }}">{{ t.value }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="file">Fichier (mod / resource pack)</label>
+        <input type="file" name="file" id="file" accept=".jar,.zip">
+      </div>
+    </div>
+
+    <div class="field" style="margin-bottom:1rem;">
+      <label for="server_path">Ou dossier local (monde / modpack)</label>
+      <input type="text" name="server_path" id="server_path" placeholder="C:\...\saves\MonMonde">
+      <span class="hint">Rempli uniquement pour un type "world" ou "modpack".</span>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="source_version">Version source</label>
+        <input type="text" name="source_version" id="source_version" placeholder="1.19.2" required>
+      </div>
+      <div class="field">
+        <label for="target_version">Version cible</label>
+        <input type="text" name="target_version" id="target_version" placeholder="1.21.1" required>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="source_loader">Loader source</label>
+        <select name="source_loader" id="source_loader">
+          {% for l in loaders %}<option value="{{ l.value }}">{{ l.value }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="target_loader">Loader cible</label>
+        <select name="target_loader" id="target_loader">
+          {% for l in loaders %}<option value="{{ l.value }}">{{ l.value }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <button type="submit">Convertir</button>
+  </form>
+
+  {% if report %}
+  <div class="report">
+    <span class="status {{ report.status.value }}">{{ report.status.value }}</span>
+    <p>{{ report.message }}</p>
+    {% if job %}<p class="hint">Sortie : <code>{{ job.output_path }}</code></p>{% endif %}
+    {% if report.warnings %}
+      <strong>Avertissements</strong>
+      <ul>{% for w in report.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if report.unsupported %}
+      <strong>Non pris en charge automatiquement</strong>
+      <ul>{% for u in report.unsupported %}<li>{{ u }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>

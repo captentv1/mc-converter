@@ -1,0 +1,8 @@
+{
+  "_comment": "Metadonnees par loader. cross_loader_compatible_with = un jar de ce loader tourne tel quel sur l'autre (aucune conversion necessaire). partial_manifest_conversion_with = le manifest peut etre traduit automatiquement, mais le code (references net.minecraftforge/net.neoforged dans le bytecode) doit encore etre porte a la main.",
+  "vanilla": { "manifest": null, "cross_loader_compatible_with": [], "partial_manifest_conversion_with": [] },
+  "forge": { "manifest": "META-INF/mods.toml", "cross_loader_compatible_with": [], "partial_manifest_conversion_with": ["neoforge"] },
+  "neoforge": { "manifest": "META-INF/neoforge.mods.toml", "cross_loader_compatible_with": [], "partial_manifest_conversion_with": ["forge"] },
+  "fabric": { "manifest": "fabric.mod.json", "cross_loader_compatible_with": ["quilt"], "partial_manifest_conversion_with": [] },
+  "quilt": { "manifest": "quilt.mod.json", "cross_loader_compatible_with": ["fabric"], "partial_manifest_conversion_with": [] }
+}
