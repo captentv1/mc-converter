@@ -118,6 +118,31 @@ def test_mod_forge_to_fabric_is_reported_unsupported_with_analysis(tmp_path, eng
     assert any("forge" in w for w in job.report.warnings)
 
 
+def test_mod_already_multiloader_is_used_as_is(tmp_path, engine):
+    """Certains jars reels embarquent nativement mods.toml ET neoforge.mods.toml
+    (multiloader). Pas de traduction a faire ni de dedup a rater dans ce cas."""
+    src = tmp_path / "multiloader.jar"
+    _make_zip(src, {
+        "META-INF/mods.toml": FORGE_TOML,
+        "META-INF/neoforge.mods.toml": FORGE_TOML.replace('modId="forge"', 'modId="neoforge"'),
+        "com/example/Mod.class": b"\xca\xfe\xba\xbe",
+    })
+
+    job = ConversionJob(
+        type=JobType.MOD, source_version="1.19.2", target_version="1.19.2",
+        source_loader=Loader.NEOFORGE, target_loader=Loader.FORGE,
+        input_path=src, output_path=tmp_path / "out.jar",
+    )
+    job = engine.submit_job(job)
+
+    assert job.report.status == Status.OK
+    assert "multiloader" in job.report.message
+    with zipfile.ZipFile(job.output_path) as z:
+        # les deux manifests d'origine sont preserves tels quels, aucun doublon
+        assert z.namelist().count("META-INF/mods.toml") == 1
+        assert "META-INF/neoforge.mods.toml" in z.namelist()
+
+
 def test_resourcepack_unknown_target_version_fails(tmp_path, engine):
     src = tmp_path / "pack.zip"
     _make_zip(src, {"pack.mcmeta": json.dumps({"pack": {"pack_format": 9, "description": "t"}})})

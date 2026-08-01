@@ -53,29 +53,48 @@ class ModConverter(BaseConverter):
             return report
 
         with zipfile.ZipFile(job.input_path, "r") as src:
-            names = set(src.namelist())
+            # dict = dedoublonne automatiquement les entrees en double presentes
+            # dans le jar source (rencontre sur des jars "multiloader" reels).
+            entries: dict[str, bytes] = {name: src.read(name) for name in src.namelist()}
+            names = set(entries)
             manifest_name = self._find_manifest(job.source_loader, names)
             if manifest_name is None:
                 report.status = Status.FAILED
                 report.message = f"Manifest de loader introuvable pour {source}"
                 return report
 
-            raw = src.read(manifest_name)
             translate = partial and not same_loader
-            target_manifest_name = ALL_MANIFESTS.get(job.target_loader, manifest_name) if translate else manifest_name
+            target_manifest_name = ALL_MANIFESTS.get(job.target_loader, manifest_name)
 
+            # Certains mods sont deja "multiloader" et embarquent nativement
+            # le manifest du loader cible (ex: mods.toml + neoforge.mods.toml
+            # dans le meme jar). Dans ce cas, pas de traduction a faire :
+            # le mod tourne deja tel quel sur le loader cible.
+            if translate and target_manifest_name in names:
+                report.status = Status.OK
+                report.message = (
+                    f"Jar deja multiloader : contient nativement {target_manifest_name}, "
+                    f"aucune conversion necessaire pour {source} -> {target}."
+                )
+                with zipfile.ZipFile(job.output_path, "w", zipfile.ZIP_DEFLATED) as dst:
+                    for name, data in entries.items():
+                        dst.writestr(name, data)
+                return report
+
+            raw = entries[manifest_name]
             if manifest_name.endswith(".json"):
                 updated_raw, warnings = self._bump_json_manifest(raw, job)
             else:
                 updated_raw, warnings = self._bump_toml_manifest(raw, job, translate)
             report.warnings.extend(warnings)
 
+            if translate and target_manifest_name != manifest_name:
+                del entries[manifest_name]
+            entries[target_manifest_name] = updated_raw
+
             with zipfile.ZipFile(job.output_path, "w", zipfile.ZIP_DEFLATED) as dst:
-                for item in src.infolist():
-                    if item.filename == manifest_name:
-                        dst.writestr(target_manifest_name, updated_raw)
-                    else:
-                        dst.writestr(item, src.read(item.filename))
+                for name, data in entries.items():
+                    dst.writestr(name, data)
 
         if translate:
             analysis = static_analysis.analyze_jar(job.input_path)

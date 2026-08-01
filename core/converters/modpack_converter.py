@@ -29,7 +29,7 @@ class ModpackConverter(BaseConverter):
         shutil.copytree(job.input_path, job.output_path)
         out_mods_dir = job.output_path / "mods"
 
-        converted, failed = 0, 0
+        converted, partial, failed = 0, 0, 0
         for jar_path in mods_dir.glob("*.jar"):
             mod_job = ConversionJob(
                 type=JobType.MOD,
@@ -45,15 +45,23 @@ class ModpackConverter(BaseConverter):
             report.unsupported.extend(mod_report.unsupported)
             if mod_report.status == Status.OK:
                 converted += 1
+            elif mod_report.status == Status.PARTIAL:
+                # Manifest traduit mais code non porte : le jar est garde
+                # (utile) plutot que supprime, le rapport signale le reste
+                # a faire via warnings/unsupported.
+                partial += 1
             else:
                 failed += 1
                 (out_mods_dir / jar_path.name).unlink(missing_ok=True)
 
-        if failed == 0:
+        if failed == 0 and partial == 0:
             report.status = Status.OK
-        elif converted > 0:
+        elif converted + partial > 0:
             report.status = Status.PARTIAL
         else:
             report.status = Status.FAILED
-        report.message = f"{converted} mod(s) converti(s), {failed} necessitent une revue manuelle."
+        report.message = (
+            f"{converted} mod(s) converti(s) sans reserve, {partial} avec manifest traduit "
+            f"mais code a porter manuellement, {failed} non convertis (a remplacer/porter)."
+        )
         return report
