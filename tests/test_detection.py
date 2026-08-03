@@ -55,3 +55,23 @@ def test_detect_resourcepack_from_pack_format(tmp_path):
     result = detection.detect_resourcepack(pack)
 
     assert result.version == "1.20-1.20.1"
+
+
+def test_detect_modpack_samples_first_mod(tmp_path):
+    modpack = tmp_path / "MyPack"
+    mods_dir = modpack / "mods"
+    mods_dir.mkdir(parents=True)
+    _make_zip(mods_dir / "amod.jar", {
+        "fabric.mod.json": json.dumps({"id": "amod", "depends": {"minecraft": ">=1.20.1"}}),
+    })
+
+    result = detection.detect_modpack(modpack)
+
+    assert result.loader == Loader.FABRIC
+    assert result.version == "1.20.1"
+    assert "amod.jar" in result.notes[0]
+
+
+def test_detect_modpack_no_mods_dir(tmp_path):
+    result = detection.detect_modpack(tmp_path / "empty")
+    assert result.loader is None

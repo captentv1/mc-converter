@@ -42,6 +42,22 @@ def detect_mod(jar_path: Path) -> Detection:
     return Detection(notes=["Aucun manifest de loader connu trouve dans ce jar."])
 
 
+def detect_modpack(folder: Path) -> Detection:
+    """Un modpack n'a pas de manifest a lui : on echantillonne le premier
+    .jar de mods/ et on suppose que tout le pack partage le meme loader
+    (vrai dans l'immense majorite des cas — un launcher ne melange pas
+    les loaders au sein d'une meme instance)."""
+    mods_dir = folder / "mods"
+    if not mods_dir.is_dir():
+        return Detection(notes=["Dossier 'mods' introuvable."])
+    jars = sorted(mods_dir.glob("*.jar"))
+    if not jars:
+        return Detection(notes=["Aucun .jar trouve dans mods/."])
+    result = detect_mod(jars[0])
+    result.notes = [f"Deduit de {jars[0].name} (echantillon)"] + result.notes
+    return result
+
+
 def detect_resourcepack(path: Path) -> Detection:
     if path.is_dir():
         mcmeta_path = path / "pack.mcmeta"

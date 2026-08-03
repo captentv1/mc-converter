@@ -16,8 +16,12 @@ from core.job import ConversionJob, JobType, Loader, Status
 from core.orchestrator import CoreEngine
 
 AUTO = "Auto-detecter"
-LOADERS = [l.value for l in Loader]
+# "vanilla" n'a pas de sens comme loader d'un mod/modpack (un mod a
+# forcement un vrai loader) ; le champ n'est de toute facon pas utilise
+# par les converters world/resourcepack, donc pas besoin de le proposer.
+LOADERS = [l.value for l in Loader if l != Loader.VANILLA]
 TYPES = [t.value for t in JobType]
+LOADER_RELEVANT_TYPES = (JobType.MOD, JobType.MODPACK)
 
 
 class MainWindow(QWidget):
@@ -75,17 +79,24 @@ class MainWindow(QWidget):
         if path:
             self.input_path = Path(path)
             self.path_label.setText(str(self.input_path))
-            self.detection_label.setText("")
+            self._run_detection_preview()
+
+    def _detect(self, job_type: JobType):
+        if job_type == JobType.MOD:
+            return detection.detect_mod(self.input_path)
+        if job_type == JobType.MODPACK:
+            return detection.detect_modpack(self.input_path)
+        if job_type == JobType.RESOURCEPACK:
+            return detection.detect_resourcepack(self.input_path)
+        return None
 
     def _run_detection_preview(self) -> None:
-        """Detecte tout de suite au choix du fichier, pour que l'utilisateur
-        voie le loader/version deduits avant meme de cliquer sur Convertir."""
+        """Detecte tout de suite au choix du fichier/dossier, pour que
+        l'utilisateur voie le loader/version deduits avant meme de cliquer
+        sur Convertir."""
         job_type = JobType(self.type_box.currentText())
-        if job_type == JobType.MOD:
-            result = detection.detect_mod(self.input_path)
-        elif job_type == JobType.RESOURCEPACK:
-            result = detection.detect_resourcepack(self.input_path)
-        else:
+        result = self._detect(job_type)
+        if result is None:
             self.detection_label.setText("")
             return
 
@@ -94,7 +105,7 @@ class MainWindow(QWidget):
             parts.append(f"loader detecte : {result.loader.value}")
         if result.version:
             parts.append(f"version detectee : {result.version}")
-        self.detection_label.setText(" ; ".join(parts) if parts else "Detection automatique : rien trouve dans le fichier.")
+        self.detection_label.setText(" ; ".join(parts) if parts else "Detection automatique : rien trouve.")
 
     def run_conversion(self) -> None:
         if self.input_path is None:
@@ -107,32 +118,39 @@ class MainWindow(QWidget):
         job_type = JobType(self.type_box.currentText())
         source_version = self.source_version.text().strip()
         source_loader_choice = self.source_loader.currentText()
+        target_loader = Loader(self.target_loader.currentText())
 
-        if job_type in (JobType.MOD, JobType.RESOURCEPACK) and (source_loader_choice == AUTO or not source_version):
-            result = detection.detect_mod(self.input_path) if job_type == JobType.MOD else detection.detect_resourcepack(self.input_path)
-            if source_loader_choice == AUTO:
-                if result.loader is None and job_type == JobType.MOD:
-                    QMessageBox.warning(self, "MC-Converter", "Loader non detecte automatiquement ; choisis-le dans la liste.")
-                    return
-                source_loader = result.loader or Loader.VANILLA
+        if job_type in LOADER_RELEVANT_TYPES:
+            if source_loader_choice == AUTO or not source_version:
+                result = self._detect(job_type)
+                if source_loader_choice == AUTO:
+                    if result.loader is None:
+                        QMessageBox.warning(self, "MC-Converter", "Loader non detecte automatiquement ; choisis-le dans la liste.")
+                        return
+                    source_loader = result.loader
+                else:
+                    source_loader = Loader(source_loader_choice)
+                # Purement informatif (les converters se basent sur la
+                # version CIBLE) : on ne bloque pas si elle est introuvable.
+                if not source_version:
+                    source_version = result.version or "inconnue"
             else:
                 source_loader = Loader(source_loader_choice)
-            # Purement informatif (les converters se basent sur la version
-            # CIBLE) : on ne bloque pas la conversion si elle est introuvable.
-            if not source_version:
-                source_version = result.version or "inconnue"
         else:
-            source_loader = Loader(source_loader_choice) if source_loader_choice != AUTO else Loader.VANILLA
+            source_loader = Loader.VANILLA
+            if source_loader_choice == AUTO or not source_version:
+                result = self._detect(job_type)
+                if result and not source_version:
+                    source_version = result.version or "inconnue"
             if not source_version:
-                QMessageBox.warning(self, "MC-Converter", "Renseigne la version source.")
-                return
+                source_version = "inconnue"
 
         job = ConversionJob(
             type=job_type,
             source_version=source_version,
             target_version=self.target_version.text().strip(),
             source_loader=source_loader,
-            target_loader=Loader(self.target_loader.currentText()),
+            target_loader=target_loader,
             input_path=self.input_path,
         )
 
