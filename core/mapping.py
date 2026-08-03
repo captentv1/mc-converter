@@ -47,6 +47,15 @@ def _version_in_range(version: str, low: str, high: str) -> bool:
     return lo <= v <= hi
 
 
+def get_version_range_for_pack_format(pack_format: int) -> str | None:
+    """Inverse de get_pack_format : renvoie la plage de versions MC (ex: '1.20-1.20.1')
+    correspondant a un pack_format donne, pour la detection automatique."""
+    for version_range, fmt in _pack_format_table().items():
+        if fmt == pack_format:
+            return version_range
+    return None
+
+
 def get_loader_info(loader: str) -> dict:
     return _loaders_table().get(loader, {})
 

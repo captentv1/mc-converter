@@ -68,7 +68,7 @@
     <div class="row">
       <div class="field">
         <label for="source_version">Version source</label>
-        <input type="text" name="source_version" id="source_version" placeholder="1.19.2" required>
+        <input type="text" name="source_version" id="source_version" placeholder="laisser vide = auto-detecte">
       </div>
       <div class="field">
         <label for="target_version">Version cible</label>
@@ -80,8 +80,10 @@
       <div class="field">
         <label for="source_loader">Loader source</label>
         <select name="source_loader" id="source_loader">
+          <option value="auto" selected>Auto-detecter</option>
           {% for l in loaders %}<option value="{{ l.value }}">{{ l.value }}</option>{% endfor %}
         </select>
+        <span class="hint">Pour un mod/resource pack, deduit du fichier si laisse sur "Auto-detecter".</span>
       </div>
       <div class="field">
         <label for="target_loader">Loader cible</label>
@@ -97,6 +99,8 @@
   {% if report %}
   <div class="report">
     <span class="status {{ report.status.value }}">{{ report.status.value }}</span>
+    {% if detected_note %}<p class="hint">Detecte automatiquement : {{ detected_note }}</p>{% endif %}
+    {% if job %}<p class="hint">Source detectee : {{ job.source_version }} / {{ job.source_loader.value }}</p>{% endif %}
     <p>{{ report.message }}</p>
     {% if job %}<p class="hint">Sortie : <code>{{ job.output_path }}</code></p>{% endif %}
     {% if report.warnings %}
