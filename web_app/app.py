@@ -47,6 +47,7 @@ def convert():
         uploaded = request.files.get("file")
         if not uploaded or not uploaded.filename:
             return _render(report=None, error="Choisis un fichier a convertir.")
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         input_path = UPLOAD_DIR / uploaded.filename
         uploaded.save(input_path)
 
@@ -70,6 +71,7 @@ def convert():
         else:
             source_loader = Loader(source_loader_raw)
 
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         output_path = OUTPUT_DIR / f"{input_path.stem}_{target_version}_{target_loader.value}{input_path.suffix}"
     else:
         source_loader = Loader(source_loader_raw) if source_loader_raw != "auto" else Loader.VANILLA
@@ -77,6 +79,7 @@ def convert():
         if not server_path or not Path(server_path).is_dir():
             return _render(report=None, error="Pour un monde ou un modpack, indique un chemin de dossier valide sur ce PC.")
         input_path = Path(server_path)
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         output_path = OUTPUT_DIR / f"{input_path.name}_{target_version}_{target_loader.value}"
 
     job = ConversionJob(
