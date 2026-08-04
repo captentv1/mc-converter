@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 import sys
+from functools import partial
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QComboBox, QPushButton,
-    QFileDialog, QPlainTextEdit, QGridLayout, QVBoxLayout, QMessageBox,
+    QFileDialog, QPlainTextEdit, QGridLayout, QVBoxLayout, QHBoxLayout,
+    QMessageBox, QButtonGroup,
 )
 
 from core import detection
@@ -20,19 +22,63 @@ AUTO = "Auto-detecter"
 # forcement un vrai loader) ; le champ n'est de toute facon pas utilise
 # par les converters world/resourcepack, donc pas besoin de le proposer.
 LOADERS = [l.value for l in Loader if l != Loader.VANILLA]
-TYPES = [t.value for t in JobType]
 LOADER_RELEVANT_TYPES = (JobType.MOD, JobType.MODPACK)
+FILE_BASED_TYPES = (JobType.MOD, JobType.RESOURCEPACK)
+
+TYPE_LABELS = {
+    JobType.MOD: "Mod",
+    JobType.MODPACK: "Modpack",
+    JobType.WORLD: "Monde",
+    JobType.RESOURCEPACK: "Resource pack",
+}
+
+SIDEBAR_STYLE = """
+QPushButton {
+    text-align: left; padding: 10px 12px; border: none; border-radius: 6px;
+    color: #5a564d; background: transparent; font-size: 13px;
+}
+QPushButton:hover { background: #edeae1; }
+QPushButton:checked { background: #e4ede3; color: #2f5a33; font-weight: 600; }
+"""
 
 
 class MainWindow(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("MC-Converter")
-        self.resize(560, 500)
+        self.resize(720, 520)
         self.engine = CoreEngine()
         self.input_path: Path | None = None
+        self.current_type = JobType.MOD
 
-        self.type_box = QComboBox(); self.type_box.addItems(TYPES)
+        self._build_ui()
+        self._apply_type(JobType.MOD)
+
+    def _build_ui(self) -> None:
+        # --- Sidebar ---
+        sidebar = QWidget()
+        sidebar.setFixedWidth(160)
+        sidebar.setStyleSheet("background: #ffffff; border-right: 1px solid #dcd6c8;")
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(8, 16, 8, 16)
+        title = QLabel("MC-Converter")
+        title.setStyleSheet("font-weight: 700; padding: 0 4px 12px;")
+        sidebar_layout.addWidget(title)
+
+        self.type_group = QButtonGroup(self)
+        self.type_group.setExclusive(True)
+        self.type_buttons: dict[JobType, QPushButton] = {}
+        for job_type in JobType:
+            btn = QPushButton(TYPE_LABELS[job_type])
+            btn.setCheckable(True)
+            btn.setStyleSheet(SIDEBAR_STYLE)
+            btn.clicked.connect(partial(self._apply_type, job_type))
+            self.type_group.addButton(btn)
+            sidebar_layout.addWidget(btn)
+            self.type_buttons[job_type] = btn
+        sidebar_layout.addStretch()
+
+        # --- Formulaire ---
         self.source_version = QLineEdit(placeholderText="vide = auto-detecte depuis le fichier")
         self.target_version = QLineEdit(placeholderText="ex: 1.21.1")
         self.source_loader = QComboBox(); self.source_loader.addItems([AUTO, *LOADERS])
@@ -40,32 +86,63 @@ class MainWindow(QWidget):
         self.path_label = QLabel("Aucun fichier/dossier selectionne")
         self.detection_label = QLabel("")
         self.detection_label.setStyleSheet("color: #4a7c4e;")
-        pick_file_btn = QPushButton("Choisir un fichier…")
-        pick_dir_btn = QPushButton("Choisir un dossier…")
+        self.pick_file_btn = QPushButton("Choisir un fichier…")
+        self.pick_dir_btn = QPushButton("Choisir un dossier…")
         convert_btn = QPushButton("Convertir")
         convert_btn.setStyleSheet("font-weight:600;")
         self.output = QPlainTextEdit(readOnly=True)
 
-        pick_file_btn.clicked.connect(self.pick_file)
-        pick_dir_btn.clicked.connect(self.pick_dir)
+        self.pick_file_btn.clicked.connect(self.pick_file)
+        self.pick_dir_btn.clicked.connect(self.pick_dir)
         convert_btn.clicked.connect(self.run_conversion)
 
-        grid = QGridLayout()
-        grid.addWidget(QLabel("Type"), 0, 0); grid.addWidget(self.type_box, 0, 1)
-        grid.addWidget(QLabel("Version source"), 1, 0); grid.addWidget(self.source_version, 1, 1)
-        grid.addWidget(QLabel("Version cible"), 2, 0); grid.addWidget(self.target_version, 2, 1)
-        grid.addWidget(QLabel("Loader source"), 3, 0); grid.addWidget(self.source_loader, 3, 1)
-        grid.addWidget(QLabel("Loader cible"), 4, 0); grid.addWidget(self.target_loader, 4, 1)
+        self.loader_labels = [QLabel("Loader source"), QLabel("Loader cible")]
 
-        layout = QVBoxLayout(self)
-        layout.addLayout(grid)
-        layout.addWidget(pick_file_btn)
-        layout.addWidget(pick_dir_btn)
-        layout.addWidget(self.path_label)
-        layout.addWidget(self.detection_label)
-        layout.addWidget(convert_btn)
-        layout.addWidget(QLabel("Rapport"))
-        layout.addWidget(self.output)
+        self.grid = QGridLayout()
+        self.grid.addWidget(QLabel("Version source"), 0, 0); self.grid.addWidget(self.source_version, 0, 1)
+        self.grid.addWidget(QLabel("Version cible"), 1, 0); self.grid.addWidget(self.target_version, 1, 1)
+        self.grid.addWidget(self.loader_labels[0], 2, 0); self.grid.addWidget(self.source_loader, 2, 1)
+        self.grid.addWidget(self.loader_labels[1], 3, 0); self.grid.addWidget(self.target_loader, 3, 1)
+
+        content = QVBoxLayout()
+        content.addLayout(self.grid)
+        content.addWidget(self.pick_file_btn)
+        content.addWidget(self.pick_dir_btn)
+        content.addWidget(self.path_label)
+        content.addWidget(self.detection_label)
+        content.addWidget(convert_btn)
+        content.addWidget(QLabel("Rapport"))
+        content.addWidget(self.output)
+
+        content_widget = QWidget()
+        content_widget.setLayout(content)
+        content_widget.setContentsMargins(0, 0, 0, 0)
+
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        root.addWidget(sidebar)
+
+        main_area = QWidget()
+        main_layout = QVBoxLayout(main_area)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.addWidget(content_widget)
+        root.addWidget(main_area, stretch=1)
+
+    def _apply_type(self, job_type: JobType) -> None:
+        self.current_type = job_type
+        self.type_buttons[job_type].setChecked(True)
+        self.input_path = None
+        self.path_label.setText("Aucun fichier/dossier selectionne")
+        self.detection_label.setText("")
+
+        file_based = job_type in FILE_BASED_TYPES
+        self.pick_file_btn.setVisible(file_based)
+        self.pick_dir_btn.setVisible(not file_based)
+
+        loader_relevant = job_type in LOADER_RELEVANT_TYPES
+        for widget in (self.source_loader, self.target_loader, *self.loader_labels):
+            widget.setVisible(loader_relevant)
 
     def pick_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Choisir un mod/resource pack", filter="Archives (*.jar *.zip)")
@@ -94,8 +171,7 @@ class MainWindow(QWidget):
         """Detecte tout de suite au choix du fichier/dossier, pour que
         l'utilisateur voie le loader/version deduits avant meme de cliquer
         sur Convertir."""
-        job_type = JobType(self.type_box.currentText())
-        result = self._detect(job_type)
+        result = self._detect(self.current_type)
         if result is None:
             self.detection_label.setText("")
             return
@@ -115,10 +191,10 @@ class MainWindow(QWidget):
             QMessageBox.warning(self, "MC-Converter", "Renseigne la version cible.")
             return
 
-        job_type = JobType(self.type_box.currentText())
+        job_type = self.current_type
         source_version = self.source_version.text().strip()
         source_loader_choice = self.source_loader.currentText()
-        target_loader = Loader(self.target_loader.currentText())
+        target_loader = Loader(self.target_loader.currentText()) if job_type in LOADER_RELEVANT_TYPES else Loader.VANILLA
 
         if job_type in LOADER_RELEVANT_TYPES:
             if source_loader_choice == AUTO or not source_version:
@@ -138,12 +214,9 @@ class MainWindow(QWidget):
                 source_loader = Loader(source_loader_choice)
         else:
             source_loader = Loader.VANILLA
-            if source_loader_choice == AUTO or not source_version:
-                result = self._detect(job_type)
-                if result and not source_version:
-                    source_version = result.version or "inconnue"
             if not source_version:
-                source_version = "inconnue"
+                result = self._detect(job_type)
+                source_version = (result.version if result else None) or "inconnue"
 
         job = ConversionJob(
             type=job_type,
