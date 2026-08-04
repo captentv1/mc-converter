@@ -140,8 +140,10 @@
     typeField.value = type;
     buttons.forEach(b => b.classList.toggle('active', b.dataset.type === type));
     onlyBlocks.forEach(el => {
-      const allowed = el.dataset.only.split(' ');
-      el.style.display = allowed.includes(type) ? '' : 'none';
+      const allowed = el.dataset.only.split(' ').includes(type);
+      // display:'' ne suffit pas a annuler la regle [data-only]{display:none} :
+      // il faut remettre explicitement la valeur attendue (grid pour .row, flex pour .field).
+      el.style.display = allowed ? (el.classList.contains('row') ? 'grid' : 'flex') : 'none';
     });
   }
 
